@@ -435,7 +435,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
       
       
-      const apiBaseUrl = import.meta.env.PROD ? 'http://127.0.0.1:8000' : '';
+      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
       const response = await fetch(`${apiBaseUrl}/api/v3/chat/notification/${username}/`, {
         method: 'POST',
         headers: {

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v3';
+const API_BASE_URL = 'https://vsp210.ru/api/v3';
 
 export interface LoginCredentials {
   username: string;
@@ -437,7 +437,7 @@ class ApiService {
   }
 
   createWebSocket(chatId: number): WebSocket {
-    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${chatId}/?token=${this.token}`;
+    const wsUrl = `wss://vsp210.ru/ws/chat/${chatId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 
@@ -613,7 +613,7 @@ class ApiService {
   }
 
   createGroupWebSocket(groupId: number): WebSocket {
-    const wsUrl = `ws://127.0.0.1:8000/ws/group/${groupId}/?token=${this.token}`;
+    const wsUrl = `wss://vsp210.ru/ws/group/${groupId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 

@@ -169,7 +169,7 @@ export function UserSearch({ onClose, onStartChat }: UserSearchProps) {
                               Написать
                             </button>
                             <a
-                              href={`http://127.0.0.1:8000/account/profile/${user.username}/`}
+                              href={`https://vsp210.ru/account/profile/${user.username}/`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => setActiveDropdownUserId(null)}
