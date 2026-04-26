@@ -1,9 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiService, GroupMessage as Message } from '../../services/api';
+import { apiService, GroupMessage as Message, GroupChat } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Send, Users as GroupIcon, Mic, Square, Image as ImageIcon, X, Paperclip, File as FileIcon, Edit, Trash2, Reply, MoreVertical } from 'lucide-react';
-import { useCallback } from 'react'; 
+import { ArrowLeft, Send, Users as GroupIcon, Mic, Square, Image as ImageIcon, X, Paperclip, File as FileIcon, Edit, Trash2, Reply, MoreVertical, Smile } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getMediaUrl, formatTimeShort } from '../../utils/media';
 import { MediaGallery } from './MediaGallery';
@@ -30,10 +29,11 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [isWsConnecting, setIsWsConnecting] = useState(true);
-  const [groupDetails, setGroupDetails] = useState<{ name: string; image: string | null; participants: any[]; creator: { id: number } } | null>(null);
+  const [isWsConnecting, setIsWsConnecting] = useState(true); 
+  const [groupDetails, setGroupDetails] = useState<GroupChat | null>(null);
   const [groupId, setGroupId] = useState<number | null>(null); 
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [activeReactionMenu, setActiveReactionMenu] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
@@ -135,6 +135,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
             },
             chat_group_id: groupId,
             reply_to: data.reply_to, 
+            reactions: data.reactions,
           };
           setMessages((prevMessages) => {
             if (prevMessages.some((msg) => msg.id === newMessage.id)) {
@@ -181,6 +182,18 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
           apiService.getGroupChatDetails(groupUrl)
             .then(setGroupDetails)
             .catch(err => console.error("Failed to refresh group details after system message:", err));
+
+        } else if (data.type === 'group_message_reaction_updated') {
+          setMessages(prev => prev.map(msg => {
+            if (!('isSystem' in msg) && msg.id === data.message_id) {
+              return { ...msg, reactions: data.reactions };
+            }
+            return msg;
+          }));
+
+        } else if (data.type === 'group_deleted') {
+          alert(data.message || 'Эта группа была удалена.');
+          navigate('/');
 
         } else if (data.type === 'error') {
           console.error('WebSocket error:', data.error);
@@ -355,6 +368,15 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
     }
   };
 
+  const handleReaction = async (messageId: number, reaction: string) => {
+    try {
+      await apiService.reactToGroupMessage(messageId, reaction);
+    } catch (error) {
+      console.error("Failed to add reaction to group message:", error);
+    }
+    setActiveReactionMenu(null);
+  };
+
   const handleGroupUpdate = useCallback(() => {
     
     initializeGroupChat();
@@ -504,21 +526,59 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
           }
 
           const isOwn = message.sender?.id === user?.id;
+          const senderId = message.sender?.id;
+          const isSenderCreator = !isOwn && senderId === groupDetails?.creator.id;
+          const customTag = senderId ? groupDetails?.tags?.[senderId] : null;
+          const displayTag = isSenderCreator ? (customTag || 'Создатель') : customTag;
+          const isAppCreator = senderId === 1;
+
           return (
             <div
               key={message.id}
-              className={`flex flex-col group ${isOwn ? 'items-end' : 'items-start'}`}
+              className={`flex flex-col group ${isOwn ? 'items-end' : 'items-start'} mb-4`}
             >
               <div className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`relative max-w-[70%] rounded-lg p-3 ${
+                  className={`relative max-w-[70%] rounded-lg p-3 pb-8 ${
                     isOwn
                       ? 'bg-green-500 text-gray-900'
                       : 'bg-gray-800 text-gray-100 border border-green-500/30'
                   }`}
                 >
+                  {message.reactions && Object.keys(message.reactions).length > 0 && (
+                    <div className="absolute -bottom-3 left-2 flex gap-1 z-10">
+                      {Object.entries(message.reactions).map(([emoji, userIds]) => (
+                        userIds.length > 0 && (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReaction(message.id, emoji)}
+                            className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-colors ${
+                              userIds.includes(user?.id ?? -1)
+                                ? 'bg-blue-500 text-white border border-blue-400'
+                                : 'bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600'
+                            }`}
+                          >
+                            <span>{emoji}</span>
+                            <span>{userIds.length}</span>
+                          </button>
+                        )
+                      ))}
+                    </div>
+                  )}
+                  {activeReactionMenu === message.id && (
+                    <div className={`absolute top-full mt-2 bg-gray-800 border border-gray-700 rounded-lg p-1 flex gap-1 z-20 ${
+                      isOwn ? 'right-0' : 'left-0'
+                    }`}>
+                      {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                        <button key={emoji} onClick={() => handleReaction(message.id, emoji)} className="p-1.5 text-lg rounded-md hover:bg-gray-700 transition-colors">
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {isOwn && message.text !== 'Сообщение удалено' && (
                     <div className="absolute top-0 right-full mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
                       {message.text && !message.photo && !message.file && !message.voice_message && (
                         <button onClick={() => handleEditMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Edit size={14} /></button>
                       )}
@@ -528,6 +588,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                   )}
                   {!isOwn && message.text !== 'Сообщение удалено' && (
                     <div className="absolute top-0 left-full ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
                       <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
                       {isCreator && (
                         <button onClick={() => handleDeleteMessage(message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-red-600"><Trash2 size={14} /></button>
@@ -535,7 +596,18 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                     </div>
                   )}
                   {!isOwn && message.text !== 'Сообщение удалено' && (
-                    <p className="text-xs font-bold mb-1 text-green-400">{message.sender.username}</p>
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <p className={`text-xs font-bold ${isAppCreator ? 'text-yellow-400' : 'text-green-400'}`}>{message.sender.username}</p>
+                      {displayTag && (
+                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                          isSenderCreator
+                            ? 'text-green-300 bg-green-900/60 border-green-700'
+                            : 'text-cyan-300 bg-cyan-900/60 border-cyan-700'
+                        }`}>
+                          {displayTag}
+                        </span>
+                      )}
+                    </div>
                   )}
                   {message.photo && (
                     
@@ -628,12 +700,9 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                       {message.text && <p className="break-words">{message.text}</p>}
                     </>
                   )}
-                  <p
-                    className={`text-xs mt-1 text-right ${
+                  <p className={`absolute bottom-1 right-3 text-xs ${
                       isOwn ? 'text-gray-700' : 'text-gray-500'
-                    }`}
-                  >
-                    {message.is_edited && 'изменено '} {formatTimeShort(message.created_at)}
+                    }`}>{message.is_edited && 'изменено '}{formatTimeShort(message.created_at)}
                   </p>
                 </div>
               </div>

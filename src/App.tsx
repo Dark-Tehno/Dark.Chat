@@ -12,6 +12,7 @@ import { ChatRouter } from './components/Chat/ChatRouter';
 import { apiService } from './services/api';
 import { GroupChatWrapper } from './components/Chat/GroupChatWrapper';
 import { CreateGroupModal } from './components/Chat/CreateGroupModal';
+import { ProfileSetupPage } from './components/Auth/ProfileSetupPage';
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -27,6 +28,8 @@ function App() {
     );
   }
 
+  const isNewUser = sessionStorage.getItem('isNewUser') === 'true';
+
   if (!isAuthenticated) {
     return (
       <Routes>
@@ -35,11 +38,21 @@ function App() {
       </Routes>
     );
   }
-
+  
   return (
     <Routes>
-      <Route path="/login" element={<Navigate to="/" />} />
-      <Route path="/*" element={<MainLayout />} />
+      {isNewUser ? (
+        <>
+          <Route path="/setup-profile" element={<ProfileSetupPage />} />
+          <Route path="*" element={<Navigate to="/setup-profile" />} />
+        </>
+      ) : (
+        <>
+          <Route path="/login" element={<Navigate to="/" />} />
+          <Route path="/setup-profile" element={<Navigate to="/" />} />
+          <Route path="/*" element={<MainLayout />} />
+        </>
+      )}
     </Routes>
   );
 }
@@ -218,6 +231,13 @@ interface ProfileUser {
   last_name?: string | null;
 }
 
+const defaultAvatars = [
+  'http://127.0.0.1:8000/media/avatars/default_user_photo.png',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_2.png',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_3.jpg',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_4.jpg',
+];
+
 interface ProfileEditModalProps {
   user: ProfileUser;
   onClose: () => void;
@@ -253,6 +273,21 @@ function ProfileEditModal({ user, onClose, onProfileUpdate }: ProfileEditModalPr
         setAvatarPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDefaultAvatarSelect = async (url: string) => {
+    setAvatarPreview(url);
+    setAvatarFile(null); 
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const filename = url.split('/').pop() || 'default-avatar.jpg';
+        const file = new File([blob], filename, { type: blob.type });
+        setAvatarFile(file);
+    } catch (err) {
+        console.error("Failed to fetch default avatar:", err);
+        setError("Не удалось загрузить выбранный аватар. Пожалуйста, попробуйте снова или загрузите свой файл.");
     }
   };
 
@@ -322,6 +357,21 @@ function ProfileEditModal({ user, onClose, onProfileUpdate }: ProfileEditModalPr
             </div>
           </div>
           
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Или выберите готовый аватар</label>
+            <div className="flex gap-2 flex-wrap">
+                {defaultAvatars.map(url => (
+                    <img 
+                        key={url}
+                        src={url}
+                        alt="Default avatar"
+                        onClick={() => handleDefaultAvatarSelect(url)}
+                        className={`w-16 h-16 rounded-full object-cover cursor-pointer border-2 transition-all ${avatarPreview === url ? 'border-green-500 scale-110' : 'border-transparent hover:border-green-500/50'}`}
+                    />
+                ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="first_name" className="block text-sm font-medium text-gray-300">Имя</label>

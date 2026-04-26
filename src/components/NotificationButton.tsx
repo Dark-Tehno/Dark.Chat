@@ -103,7 +103,7 @@ const NotificationButton: React.FC = () => {
       }
 
       
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+      const apiBaseUrl = import.meta.env.PROD ? 'http:/127.0.0.1:8000' : '';
 
       
       console.log('Шаг 4: Отправляем подписку на сервер...');

@@ -21,6 +21,7 @@ export function AuthForm() {
         await login({ username, password });
       } else {
         await register({ username, email, password });
+        sessionStorage.setItem('isNewUser', 'true');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');

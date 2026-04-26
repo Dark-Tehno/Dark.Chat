@@ -58,6 +58,7 @@ export function ChatList({ onSelectChat }: ChatListProps) {
             {chats.map((chat) => {
               const otherUser = getOtherUser(chat);
               const isNew = hasNewMessages(chat);
+              const isCreator = otherUser.id === 1;
 
               return (
                 <button
@@ -70,11 +71,11 @@ export function ChatList({ onSelectChat }: ChatListProps) {
                       <img
                         src={getMediaUrl(otherUser.avatar)}
                         alt={otherUser.username}
-                        className="w-12 h-12 rounded-full border border-green-500/30"
+                        className={`w-12 h-12 rounded-full border border-green-500/30 ${isCreator ? 'ring-2 ring-yellow-400' : ''}`}
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gray-800 border border-green-500/30 flex items-center justify-center">
-                        <UserCircle className="text-green-400" size={28} />
+                      <div className={`w-12 h-12 rounded-full bg-gray-800 border border-green-500/30 flex items-center justify-center ${isCreator ? 'ring-2 ring-yellow-400' : ''}`}>
+                        <UserCircle className={`${isCreator ? 'text-yellow-400' : 'text-green-400'}`} size={28} />
                       </div>
                     )}
                     {otherUser.is_online && (
@@ -85,9 +86,8 @@ export function ChatList({ onSelectChat }: ChatListProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3
-                        className={`font-semibold ${
-                          isNew ? 'text-green-400' : 'text-gray-200'
-                        }`}
+                        className={`font-semibold ${isCreator ? 'text-yellow-400 font-bold' :
+                          isNew ? 'text-green-400' : 'text-gray-200'}`}
                       >
                         {otherUser.username}
                       </h3>

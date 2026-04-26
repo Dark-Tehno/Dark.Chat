@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://vsp210.ru/api/v3';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/v3';
 
 export interface LoginCredentials {
   username: string;
@@ -47,6 +47,7 @@ export interface Message {
   chat_room_id: number;
   button_json: unknown | null;
   reply_to?: RepliedMessage | null;
+  reactions?: { [key: string]: number[] };
 }
 
 export interface Chat {
@@ -74,6 +75,7 @@ export interface GroupMessage {
   sender: User;
   chat_group_id: number;
   reply_to?: RepliedMessage | null;
+  reactions?: { [key: string]: number[] };
 }
 
 export interface GroupChat {
@@ -83,6 +85,8 @@ export interface GroupChat {
   image: string | null;
   participants: User[];
   last_message: GroupMessage | null;
+  creator: User;
+  tags?: { [key: string]: string }; // { "participant_id": "tag_name" }
 }
 
 export interface MediaArchive {
@@ -433,7 +437,7 @@ class ApiService {
   }
 
   createWebSocket(chatId: number): WebSocket {
-    const wsUrl = `wss://vsp210.ru/ws/chat/${chatId}/?token=${this.token}`;
+    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${chatId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 
@@ -609,7 +613,7 @@ class ApiService {
   }
 
   createGroupWebSocket(groupId: number): WebSocket {
-    const wsUrl = `wss://vsp210.ru/ws/group/${groupId}/?token=${this.token}`;
+    const wsUrl = `ws://127.0.0.1:8000/ws/group/${groupId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 
@@ -625,6 +629,66 @@ class ApiService {
       throw new Error(error.error || 'Failed to add participant to group');
     }
 
+    return await response.json();
+  }
+
+  async setParticipantTag(groupUrl: string, participantId: number, tag: string): Promise<GroupChat> {
+    const response = await fetch(`${API_BASE_URL}/group-chats/${groupUrl}/participants/${participantId}/set-tag/`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ tag }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to set participant tag');
+    }
+
+    return await response.json();
+  }
+
+  async removeParticipant(groupUrl: string, participantId: number): Promise<GroupChat> {
+    const response = await fetch(`${API_BASE_URL}/group-chats/${groupUrl}/remove-participant/`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ participant_id: participantId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to remove participant from group');
+    }
+
+    return await response.json();
+  }
+
+  async deleteGroupChat(groupUrl: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/group-chats/${groupUrl}/delete/`, {
+      method: 'DELETE',
+      headers: this.getHeaders(true),
+    });
+
+    if (!response.ok && response.status !== 204) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete group chat');
+    }
+  }
+
+  async leaveGroupChat(groupUrl: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/group-chats/${groupUrl}/leave/`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+    });
+
+    if (!response.ok) { // для 204, response.ok будет true
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to leave group chat');
+    }
+
+    if (response.status === 204) {
+      // Бэкенд возвращает 204, когда группа удаляется после выхода последнего участника.
+      return { message: 'You have left the group, and it has been deleted.' };
+    }
     return await response.json();
   }
 
@@ -651,6 +715,32 @@ class ApiService {
     }
 
     return await response.json();
+  }
+
+  async reactToMessage(messageId: number, reaction: string): Promise<Message> {
+    const response = await fetch(`${API_BASE_URL}/chat/message/${messageId}/react/`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ reaction }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to react to message');
+    }
+    return response.json();
+  }
+
+  async reactToGroupMessage(messageId: number, reaction: string): Promise<GroupMessage> {
+    const response = await fetch(`${API_BASE_URL}/group-chats/message/${messageId}/react/`, {
+      method: 'POST',
+      headers: this.getHeaders(true),
+      body: JSON.stringify({ reaction }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to react to group message');
+    }
+    return response.json();
   }
 }
 

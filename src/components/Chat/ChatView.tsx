@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { apiService, Message } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply } from 'lucide-react';
+import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getMediaUrl, formatTimeShort } from '../../utils/media';
 
@@ -79,9 +79,10 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   const [isWsConnecting, setIsWsConnecting] = useState(true);
   const [chatId, setChatId] = useState<number | null>(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [otherUser, setOtherUser] = useState<{ username: string; avatar_url: string | null; is_online: boolean; user_notification: boolean; } | null>(null);
+  const [otherUser, setOtherUser] = useState<{ id: number; username: string; avatar_url: string | null; is_online: boolean; user_notification: boolean; } | null>(null);
   const [activeMessageMenu, setActiveMessageMenu] = useState<number | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [activeReactionMenu, setActiveReactionMenu] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [showMediaGallery, setShowMediaGallery] = useState(false);
@@ -183,6 +184,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
             chat_room_id: chatId, 
             button_json: null,
             reply_to: data.reply_to, 
+            reactions: data.reactions,
           };
           setMessages((prevMessages) => {
             if (prevMessages.some((msg) => msg.id === newMessage.id)) {
@@ -217,6 +219,12 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           }
           ));
 
+        } else if (data.type === 'message_reaction_updated') {
+          setMessages(prev => prev.map(msg =>
+            msg.id === data.message_id
+              ? { ...msg, reactions: data.reactions }
+              : msg
+          ));
         } else if (data.type === 'error') {
           console.error('WebSocket error:', data.error);
         }
@@ -395,6 +403,17 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     setActiveMessageMenu(null);
   };
 
+  const handleReaction = async (messageId: number, reaction: string) => {
+    try {
+      // Бэкенд отправит событие websocket для обновления UI.
+      // Мы можем оптимистично обновить здесь, но для простоты будем полагаться на websocket.
+      await apiService.reactToMessage(messageId, reaction);
+    } catch (error) {
+      console.error("Failed to add reaction:", error);
+    }
+    setActiveReactionMenu(null); // Закрываем меню после реакции
+  };
+
   const formatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -416,7 +435,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
       
       
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+      const apiBaseUrl = import.meta.env.PROD ? 'http://127.0.0.1:8000' : '';
       const response = await fetch(`${apiBaseUrl}/api/v3/chat/notification/${username}/`, {
         method: 'POST',
         headers: {
@@ -506,22 +525,22 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           <ArrowLeft size={24} />
         </button>
 
-        <div className="flex items-center gap-3 flex-1"> {}
+        <div className="flex items-center gap-3 flex-1">
           {otherUser && (
             <>
               {otherUser.avatar_url ? (
                 <img
-                  src={getMediaUrl(otherUser.avatar_url)}
-                  alt={otherUser.username}
-                  className="w-10 h-10 rounded-full border-2 border-green-500"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center">
-                  <UserCircle className="text-green-400" size={24} />
-                </div>
-              )}
+                   src={getMediaUrl(otherUser.avatar_url)}
+                   alt={otherUser.username}
+                   className={`w-10 h-10 rounded-full border-2 border-green-500 ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}
+                 />
+               ) : (
+                 <div className={`w-10 h-10 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}>
+                   <UserCircle className={`${otherUser.id === 1 ? 'text-yellow-400' : 'text-green-400'}`} size={24} />
+                 </div>
+               )}
               <div>
-                <h2 className="text-green-400 font-semibold">{otherUser.username}</h2>
+                <h2 className={`font-semibold ${otherUser.id === 1 ? 'text-yellow-400 font-bold' : 'text-green-400'}`}>{otherUser.username}</h2>
                 <div className="flex items-center gap-2">
                   {isWsConnecting ? (
                     <>
@@ -531,8 +550,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                   ) : (
                     <>
                       <div
-                        className={`w-2 h-2 rounded-full ${otherUser.is_online ? 'bg-green-400' : 'bg-gray-500'
-                          }`}
+                        className={`w-2 h-2 rounded-full ${otherUser.is_online ? 'bg-green-400' : 'bg-gray-500'}`}
                       ></div>
                       <span className="text-xs text-gray-400">
                         {otherUser.is_online ? 'Online' : 'Offline'}
@@ -589,20 +607,50 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           return (
             <div
               key={message.id}
-              className={`flex group ${isOwn ? 'justify-end' : 'justify-start'}`}
+              className={`flex group ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
             >
               <div 
                 ref={(el) => (messageRefs.current[message.id] = el)} 
-                className={`relative max-w-[70%] rounded-lg p-3 ${ 
-                  isOwn
-                    ? 'bg-green-500 text-gray-900'
-                    
-                    
-                    : 'bg-gray-800 text-gray-100 border border-green-500/30'
+                className={`relative max-w-[70%] rounded-lg p-3 pb-8 ${ 
+                  isOwn ? 'bg-green-500 text-gray-900' : 'bg-gray-800 text-gray-100 border border-green-500/30'
                 }`}
               >
+                {message.reactions && Object.keys(message.reactions).length > 0 && (
+                  <div className="absolute -bottom-3 left-2 flex gap-1 z-10">
+                    {Object.entries(message.reactions).map(([emoji, userIds]) => (
+                      userIds.length > 0 && (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReaction(message.id, emoji)}
+                          className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-colors ${
+                            userIds.includes(user?.id ?? -1)
+                              ? 'bg-blue-500 text-white border border-blue-400'
+                              : 'bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600'
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          <span>{userIds.length}</span>
+                        </button>
+                      )
+                    ))}
+                  </div>
+                )}
+                {activeReactionMenu === message.id && (
+                  <div className={`absolute top-full mt-2 bg-gray-800 border border-gray-700 rounded-lg p-1 flex gap-1 z-20 ${isOwn ? 'right-0' : 'left-0'}`}>
+                    {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleReaction(message.id, emoji)}
+                        className="p-1.5 text-lg rounded-md hover:bg-gray-700 transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {isOwn && message.text !== 'Сообщение удалено' && (
                   <div className="absolute top-0 right-full mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
                     {message.text && !message.photo && !message.file && !message.voice_message && (
                       <button onClick={() => handleEditMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Edit size={14} /></button>
                     )}
@@ -612,6 +660,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                 )}
                 {!isOwn && message.text !== 'Сообщение удалено' && (
                   <div className="absolute top-0 left-full ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
                     <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
                   </div>
                 )}
@@ -724,7 +773,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                     </>
                 )}
                 <p
-                  className={`text-xs mt-1 ${
+                  className={`absolute bottom-1 right-3 text-xs ${
                     isOwn ? 'text-gray-700' : 'text-gray-500'
                   }`}
                 >
