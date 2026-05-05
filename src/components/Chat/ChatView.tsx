@@ -1,69 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { apiService, Message } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile } from 'lucide-react';
+import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile, Gift } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getMediaUrl, formatTimeShort } from '../../utils/media';
+import { GifPicker } from './GifPicker'; 
+import { ProxiedImage } from './ProxiedImage';
+import { MediaGallery } from './MediaGallery';
+import { UserInfoPanel } from './UserInfoPanel';
 
-
-const getFileNameFromUrl = (url: string) => {
-  try {
-    const decodedUrl = decodeURIComponent(url);
-    return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1);
-  } catch (e) {
-    return url.substring(url.lastIndexOf('/') + 1);
-  }
-};
-
-interface MediaGalleryProps {
-  isOpen: boolean;
-  onClose: () => void;
-  media: { photo: string[]; file: string[] } | null;
-  isMediaLoading: boolean;
-  onImageClick: (url: string) => void;
-}
-
-function MediaGallery({ isOpen, onClose, media, isMediaLoading, onImageClick }: MediaGalleryProps) {
-  const [activeTab, setActiveTab] = useState<'photos' | 'files'>('photos');
-
-  useEffect(() => {
-    if (isOpen) {
-      setActiveTab('photos');
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="absolute inset-0 bg-gray-950/90 z-50 flex flex-col">
-      <div className="bg-gray-900 border-b border-green-500/30 p-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-green-400">Медиа</h2>
-        <button onClick={onClose} className="p-2 text-gray-400 hover:text-red-400">
-          <X size={24} />
-        </button>
-      </div>
-
-      <div className="border-b border-gray-800">
-        <nav className="flex space-x-4 px-4">
-          <button onClick={() => setActiveTab('photos')} className={`py-4 px-1 text-sm font-medium ${activeTab === 'photos' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Фото</button>
-          <button onClick={() => setActiveTab('files')} className={`py-4 px-1 text-sm font-medium ${activeTab === 'files' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-gray-200'}`}>Файлы</button>
-        </nav>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        {isMediaLoading ? (
-          <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-12 w-12 border-2 border-green-500 border-t-transparent"></div></div>
-        ) : !media || (media.photo.length === 0 && media.file.length === 0) ? (
-          <div className="flex items-center justify-center h-full text-gray-500"><p>Медиафайлы не найдены</p></div>
-        ) : (
-          <div>
-            {activeTab === 'photos' && (media.photo.length > 0 ? (<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{media.photo.map((photoUrl, index) => (<a key={index} href={getMediaUrl(photoUrl)} onClick={(e) => { e.preventDefault(); onImageClick(getMediaUrl(photoUrl)); }} className="aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer"><img src={getMediaUrl(photoUrl)} alt={`media ${index}`} className="w-full h-full object-cover" /></a>))}</div>) : (<div className="flex items-center justify-center h-48 text-gray-500"><p>Фотографии не найдены</p></div>))}
-            {activeTab === 'files' && (media.file.length > 0 ? (<div className="space-y-3">{media.file.map((fileUrl, index) => { const fileName = getFileNameFromUrl(fileUrl); return (<a key={index} href={getMediaUrl(fileUrl)} target="_blank" rel="noopener noreferrer" download={fileName} className="flex items-center gap-3 rounded-lg p-3 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700"><div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gray-600"><FileIcon size={24} className="text-gray-300" /></div><div className="flex-1 min-w-0"><p className="font-semibold truncate text-sm text-gray-200">{fileName}</p></div></a>); })}</div>) : (<div className="flex items-center justify-center h-48 text-gray-500"><p>Файлы не найдены</p></div>))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+interface TypingUser {
+  id: number;
+  username: string;
 }
 
 interface ChatViewProps {
@@ -86,23 +34,28 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   const [editingText, setEditingText] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [showMediaGallery, setShowMediaGallery] = useState(false);
+  const [showUserInfo, setShowUserInfo] = useState(false);
   const [media, setMedia] = useState<{ photo: string[]; file: string[] } | null>(null);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const [fileToSend, setFileToSend] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const messageRefs = useRef<{ [key: number]: HTMLDivElement | null }>({}); 
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { isRecording, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   
@@ -122,7 +75,15 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, typingUsers]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -174,6 +135,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
             id: data.message_id,
             photo: data.photo,
             voice_message: data.voice_message,
+            gif: data.gif,
             file: data.file,
             created_at: data.created_at,
             sender: {
@@ -211,6 +173,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                 text: 'Сообщение удалено',
                 photo: null,
                 voice_message: null,
+                gif: null,
                 file: null,
                 is_edited: true,
               };
@@ -225,6 +188,18 @@ export function ChatView({ username, onBack }: ChatViewProps) {
               ? { ...msg, reactions: data.reactions }
               : msg
           ));
+        } else if (data.type === 'user_typing') {
+          if (data.user_id !== user?.id) { // Don't show own typing status
+            setTypingUsers(prev => {
+              // Add user only if they are not already in the list
+              if (!prev.some(u => u.id === data.user_id)) {
+                return [...prev, { id: data.user_id, username: data.username }];
+              }
+              return prev;
+            });
+          }
+        } else if (data.type === 'user_stopped_typing') {
+          setTypingUsers(prev => prev.filter(u => u.id !== data.user_id));
         } else if (data.type === 'error') {
           console.error('WebSocket error:', data.error);
         }
@@ -245,6 +220,9 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     connect();
 
     return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.onclose = null; 
@@ -256,7 +234,15 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if ((!newMessage.trim() && !fileToSend && !replyToMessage) || isSending || !username) return;
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+    }
+    
+    if ((!newMessage.trim() && !fileToSend) || isSending || !username) return;
 
     setIsSending(true);
     const replyToId = replyToMessage?.id;
@@ -286,6 +272,36 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendGif = async (gifUrl: string) => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+    }
+
+    if (!gifUrl || isSending || !username) return;
+
+    setIsSending(true);
+    const replyToId = replyToMessage?.id;
+
+    try {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ gif: gifUrl, reply_to_id: replyToId }));
+      } else {
+        // Fallback to HTTP if WebSocket is not ready
+        await apiService.sendMessage(username, '', replyToId, gifUrl);
+      }
+      setReplyToMessage(null);
+      setShowGifPicker(false);
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
     } finally {
       setIsSending(false);
     }
@@ -328,6 +344,25 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+
+    if (!typingTimeoutRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'user_typing' }));
+    } else {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+      typingTimeoutRef.current = null;
+    }, 2000); // 2 seconds
   };
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -435,7 +470,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
       
       
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+      const apiBaseUrl = import.meta.env.PROD ? 'http://127.0.0.1:8000' : '';
       const response = await fetch(`${apiBaseUrl}/api/v3/chat/notification/${username}/`, {
         method: 'POST',
         headers: {
@@ -498,6 +533,12 @@ export function ChatView({ username, onBack }: ChatViewProps) {
         isMediaLoading={isMediaLoading}
         onImageClick={setLightboxImage}
       />
+      <UserInfoPanel
+        isOpen={showUserInfo}
+        onClose={() => setShowUserInfo(false)}
+        username={username}
+        onImageClick={setLightboxImage}
+      />
       {lightboxImage && (
         <div
           className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"
@@ -525,41 +566,41 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           <ArrowLeft size={24} />
         </button>
 
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           {otherUser && (
-            <>
-              {otherUser.avatar_url ? (
-                <img
-                   src={getMediaUrl(otherUser.avatar_url)}
-                   alt={otherUser.username}
-                   className={`w-10 h-10 rounded-full border-2 border-green-500 ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}
-                 />
-               ) : (
-                 <div className={`w-10 h-10 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}>
-                   <UserCircle className={`${otherUser.id === 1 ? 'text-yellow-400' : 'text-green-400'}`} size={24} />
-                 </div>
-               )}
-              <div>
-                <h2 className={`font-semibold ${otherUser.id === 1 ? 'text-yellow-400 font-bold' : 'text-green-400'}`}>{otherUser.username}</h2>
-                <div className="flex items-center gap-2">
-                  {isWsConnecting ? (
-                    <>
-                      <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
-                      <span className="text-xs text-gray-400">Соединение...</span>
-                    </>
-                  ) : (
-                    <>
-                      <div
-                        className={`w-2 h-2 rounded-full ${otherUser.is_online ? 'bg-green-400' : 'bg-gray-500'}`}
-                      ></div>
-                      <span className="text-xs text-gray-400">
-                        {otherUser.is_online ? 'Online' : 'Offline'}
-                      </span>
-                    </>
-                  )}
+            <button onClick={() => setShowUserInfo(true)} className="flex items-center gap-3 text-left hover:bg-gray-800/50 p-2 -m-2 rounded-lg transition-colors min-w-0">
+              <>
+                {otherUser.avatar_url ? (
+                  <img
+                     src={getMediaUrl(otherUser.avatar_url)}
+                     alt={otherUser.username}
+                     className={`w-10 h-10 rounded-full border-2 border-green-500 ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}
+                   />
+                 ) : (
+                   <div className={`w-10 h-10 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center ${otherUser.id === 1 ? 'ring-2 ring-yellow-400' : ''}`}>
+                     <UserCircle className={`${otherUser.id === 1 ? 'text-yellow-400' : 'text-green-400'}`} size={24} />
+                   </div>
+                 )}
+                <div className="min-w-0">
+                  <h2 className={`font-semibold truncate ${otherUser.id === 1 ? 'text-yellow-400 font-bold' : 'text-green-400'}`}>{otherUser.username}</h2>
+                  <div className="flex items-center gap-2">
+                    {isWsConnecting ? (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                        <span className="text-xs text-gray-400">Соединение...</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className={`w-2 h-2 rounded-full ${otherUser.is_online ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                        <span className="text-xs text-gray-400">
+                          {otherUser.is_online ? 'Online' : 'Offline'}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
+              </>
+            </button>
           )}
         </div>
 
@@ -686,6 +727,14 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                     onClick={() => setLightboxImage(getMediaUrl(message.photo))}
                   />
                 )}
+                {message.gif && (
+                  <ProxiedImage
+                    src={message.gif}
+                    alt="GIF"
+                    className="rounded mb-2 max-w-full"
+                    style={{ maxWidth: '250px' }}
+                  />
+                )}
                 {message.voice_message && (
                   
                   message.reply_to && (
@@ -784,6 +833,22 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           );
         })}
         <div ref={messagesEndRef} />
+        {typingUsers.length > 0 && (
+          <div className="flex justify-start">
+            <div className="text-gray-400 italic p-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="truncate">
+                {typingUsers.map((typingUser, index) => (
+                  <span key={typingUser.id} className={typingUser.id === 1 ? 'text-yellow-400 font-bold' : ''}>
+                    {typingUser.username}
+                    {index < typingUsers.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+                {typingUsers.length > 1 ? ' печатают' : ' печатает'}...
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-gray-900 border-t border-green-500/30 p-4">
@@ -846,73 +911,61 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           </div>
         )}
 
-        <form onSubmit={handleSend} className="flex gap-2">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1 px-4 py-3 bg-gray-800 border border-green-500/30 rounded-lg text-white focus:outline-none focus:border-green-500 transition-colors"
-            disabled={isSending || isRecording}
-          />
-
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePhotoSelect}
-            className="hidden"
-          />
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          {!isRecording && !newMessage.trim() && !fileToSend && (
-            <>
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={isSending}
-                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ImageIcon size={20} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isSending}
-                className="p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+        <div className="relative">
+          {showGifPicker && (
+            <GifPicker
+              onClose={() => setShowGifPicker(false)}
+              onGifSelect={handleSendGif}
+            />
+          )}
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <div className="relative">
+              <button type="button" onClick={() => setShowAttachmentMenu(prev => !prev)} className="p-3 text-gray-400 transition-colors hover:text-green-400" title="Прикрепить">
                 <Paperclip size={20} />
               </button>
+              {showAttachmentMenu && (
+                <div className="absolute bottom-full z-10 mb-2 w-48 rounded-md border border-green-500/30 bg-gray-800 shadow-lg">
+                  <button type="button" onClick={() => { setShowGifPicker(true); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <Gift size={18} />
+                    <span>GIF</span>
+                  </button>
+                  <button type="button" onClick={() => { photoInputRef.current?.click(); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <ImageIcon size={18} />
+                    <span>Фото</span>
+                  </button>
+                  <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <FileIcon size={18} />
+                    <span>Файл</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleTyping}
+              placeholder="Type a message..."
+              className="flex-1 rounded-lg border border-green-500/30 bg-gray-800 px-4 py-3 text-white transition-colors focus:border-green-500 focus:outline-none"
+              disabled={isSending || isRecording}
+            />
 
-              <button
-                type="button"
-                onClick={handleStartRecording}
-                disabled={isSending}
-                className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+
+            <input ref={fileInputRef} type="file" onChange={handleFileSelect} className="hidden" />
+
+            {!isRecording && !newMessage.trim() && !fileToSend && (
+              <button type="button" onClick={handleStartRecording} disabled={isSending} className="rounded-lg bg-red-600 p-3 text-white transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
                 <Mic size={20} />
               </button>
-            </>
-          )}
+            )}
 
-          {(!isRecording && (newMessage.trim() || fileToSend)) && (
-            <button
-              type="submit"
-              disabled={isSending}
-              className="bg-green-500 hover:bg-green-600 text-gray-900 font-semibold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 neon-button"
-            >
-              <Send size={20} />
-            </button>
-          )}
-
-        </form>
+            {(!isRecording && (newMessage.trim() || fileToSend)) && (
+              <button type="submit" disabled={isSending} className="neon-button flex items-center gap-2 rounded-lg bg-green-500 py-3 px-6 font-semibold text-gray-900 transition-all hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50">
+                <Send size={20} />
+              </button>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   );

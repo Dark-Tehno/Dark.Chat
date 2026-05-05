@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://vsp210.ru/api/v3';
+const API_BASE_URL = 'http://127.0.0.1:8000/api/v3';
 
 export interface LoginCredentials {
   username: string;
@@ -41,6 +41,7 @@ export interface Message {
     name: string;
     size: number;
   } | null;
+  gif: string | null;
   created_at: string;
   is_edited?: boolean;
   sender: User | { type: string; id: number; username: string; avatar?: string | null };
@@ -70,6 +71,7 @@ export interface GroupMessage {
     name: string;
     size: number;
   } | null;
+  gif: string | null;
   created_at: string;
   is_edited?: boolean;
   sender: User;
@@ -244,6 +246,20 @@ class ApiService {
     return data.users;
   }
 
+  async searchGifs(query: string) {
+    const response = await fetch(`${API_BASE_URL}/integrations/gifs/search/?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: this.getHeaders(true),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to search GIFs');
+    }
+
+    return await response.json();
+  }
+
   async getChats(): Promise<Chat[]> {
     const response = await fetch(`${API_BASE_URL}/chats/`, {
       method: 'POST',
@@ -272,11 +288,14 @@ class ApiService {
     return await response.json();
   }
 
-  async sendMessage(username: string, message: string, replyToId?: number) {
+  async sendMessage(username: string, message: string, replyToId?: number, gifUrl?: string) {
     const formData = new FormData();
     formData.append('message', message);
     if (replyToId) {
       formData.append('reply_to_id', replyToId.toString());
+    }
+    if (gifUrl) {
+      formData.append('gif', gifUrl);
     }
 
     const response = await fetch(`${API_BASE_URL}/chat/${username}/send/`, {
@@ -437,7 +456,7 @@ class ApiService {
   }
 
   createWebSocket(chatId: number): WebSocket {
-    const wsUrl = `wss://vsp210.ru/ws/chat/${chatId}/?token=${this.token}`;
+    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${chatId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 
@@ -485,7 +504,7 @@ class ApiService {
     return await response.json();
   }
 
-  async sendGroupMessage(groupUrl: string, data: { message?: string; photo?: Blob; voice?: Blob }, replyToId?: number) {
+  async sendGroupMessage(groupUrl: string, data: { message?: string; photo?: Blob; voice?: Blob; gif?: string }, replyToId?: number) {
     const formData = new FormData();
     if (data.message) {
       formData.append('message', data.message);
@@ -495,6 +514,9 @@ class ApiService {
     }
     if (data.voice) {
       formData.append('voice', data.voice);
+    }
+    if (data.gif) {
+      formData.append('gif', data.gif);
     }
     if (replyToId) {
       formData.append('reply_to_id', replyToId.toString());
@@ -613,7 +635,7 @@ class ApiService {
   }
 
   createGroupWebSocket(groupId: number): WebSocket {
-    const wsUrl = `wss://vsp210.ru/ws/group/${groupId}/?token=${this.token}`;
+    const wsUrl = `ws://127.0.0.1:8000/ws/group/${groupId}/?token=${this.token}`;
     return new WebSocket(wsUrl);
   }
 

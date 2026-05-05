@@ -2,11 +2,13 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService, GroupMessage as Message, GroupChat } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Send, Users as GroupIcon, Mic, Square, Image as ImageIcon, X, Paperclip, File as FileIcon, Edit, Trash2, Reply, MoreVertical, Smile } from 'lucide-react';
+import { ArrowLeft, Send, Users as GroupIcon, Mic, Square, Image as ImageIcon, X, Paperclip, File as FileIcon, Edit, Trash2, Reply, MoreVertical, Smile, Gift } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getMediaUrl, formatTimeShort } from '../../utils/media';
 import { MediaGallery } from './MediaGallery';
+import { ProxiedImage } from './ProxiedImage';
 import { GroupInfoPanel } from './GroupInfoPanel';
+import { GifPicker } from '../Chat/GifPicker';
 
 
 interface SystemMessage {
@@ -17,6 +19,11 @@ interface SystemMessage {
 }
 
 type ChatItem = Message | SystemMessage;
+
+interface TypingUser {
+  id: number;
+  username: string;
+}
 
 interface GroupChatViewProps {
   
@@ -44,11 +51,15 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
   const [fileToSend, setFileToSend] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null); 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { isRecording, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
@@ -62,7 +73,15 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, typingUsers]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   
   
@@ -126,6 +145,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
             id: data.message_id,
             photo: data.photo,
             voice_message: data.voice_message,
+            gif: data.gif,
             file: data.file,
             created_at: data.created_at,
             sender: {
@@ -158,6 +178,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                 text: 'Сообщение удалено',
                 photo: null,
                 voice_message: null,
+                gif: null,
                 file: null,
                 is_edited: true,
               };
@@ -195,6 +216,18 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
           alert(data.message || 'Эта группа была удалена.');
           navigate('/');
 
+        } else if (data.type === 'user_typing') {
+          if (data.user_id !== user?.id) { // Don't show own typing status
+            setTypingUsers(prev => {
+              // Add user only if they are not already in the list
+              if (!prev.some(u => u.id === data.user_id)) {
+                return [...prev, { id: data.user_id, username: data.username }];
+              }
+              return prev;
+            });
+          }
+        } else if (data.type === 'user_stopped_typing') {
+          setTypingUsers(prev => prev.filter(u => u.id !== data.user_id));
         } else if (data.type === 'error') {
           console.error('WebSocket error:', data.error);
         }
@@ -215,18 +248,29 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
     connect();
 
     return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.onclose = null; 
         wsRef.current.close();
       }
     };
-  }, [groupId]); 
+  }, [groupId, user, groupUrl, navigate]); 
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+    }
     
-    if ((!newMessage.trim() && !fileToSend && !replyToMessage) || isSending || !groupUrl) return;
+    if ((!newMessage.trim() && !fileToSend) || isSending || !groupUrl) return;
 
     setIsSending(true);
     const replyToId = replyToMessage?.id;
@@ -256,6 +300,36 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
       setFilePreview(null);
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendGif = async (gifUrl: string) => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+    }
+
+    if (!gifUrl || isSending || !groupUrl) return;
+
+    setIsSending(true);
+    const replyToId = replyToMessage?.id;
+
+    try {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ gif: gifUrl, reply_to_id: replyToId }));
+      } else {
+        // Fallback to HTTP if WebSocket is not ready
+        await apiService.sendGroupMessage(groupUrl, { message: '', gif: gifUrl }, replyToId);
+      }
+      setReplyToMessage(null);
+      setShowGifPicker(false);
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
     } finally {
       setIsSending(false);
     }
@@ -298,6 +372,25 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+
+    if (!typingTimeoutRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'user_typing' }));
+    } else {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
+      }
+      typingTimeoutRef.current = null;
+    }, 2000); // 2 seconds
   };
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -597,7 +690,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                   )}
                   {!isOwn && message.text !== 'Сообщение удалено' && (
                     <div className="flex items-baseline gap-2 mb-1">
-                      <p className={`text-xs font-bold ${isAppCreator ? 'text-yellow-400' : 'text-green-400'}`}>{message.sender.username}</p>
+                      <p className={`text-xs font-bold ${isAppCreator ? 'text-yellow-400' : 'text-green-400'}`}>{message.sender?.username || 'Unknown User'}</p>
                       {displayTag && (
                         <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
                           isSenderCreator
@@ -626,6 +719,14 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                       alt="Shared"
                       className="rounded mb-2 max-w-full cursor-pointer"
                       onClick={() => setLightboxImage(getMediaUrl(message.photo))}
+                    />
+                  )}
+                  {message.gif && (
+                    <ProxiedImage
+                      src={message.gif}
+                      alt="GIF"
+                      className="rounded mb-2 max-w-full"
+                      style={{ maxWidth: '250px' }}
                     />
                   )}
                   {message.voice_message && (
@@ -710,6 +811,22 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
           );
         })}
         <div ref={messagesEndRef} />
+        {typingUsers.length > 0 && (
+          <div className="flex justify-start">
+            <div className="text-gray-400 italic p-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="truncate">
+                {typingUsers.map((typingUser, index) => (
+                  <span key={typingUser.id} className={typingUser.id === 1 ? 'text-yellow-400 font-bold' : ''}>
+                    {typingUser.username}
+                    {index < typingUsers.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+                {typingUsers.length > 1 ? ' печатают' : ' печатает'}...
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-gray-900 border-t border-green-500/30 p-4">
@@ -772,73 +889,55 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
           </div>
         )}
 
-        <form onSubmit={handleSend} className="flex gap-2">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1 px-4 py-3 bg-gray-800 border border-green-500/30 rounded-lg text-white focus:outline-none focus:border-green-500 transition-colors"
-            disabled={isSending || isRecording}
-          />
-
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePhotoSelect}
-            className="hidden"
-          />
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          {!isRecording && !newMessage.trim() && !fileToSend && (
-            <>
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={isSending}
-                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ImageIcon size={20} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isSending}
-                className="p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+        <div className="relative">
+          {showGifPicker && (
+            <GifPicker
+              onClose={() => setShowGifPicker(false)}
+              onGifSelect={handleSendGif}
+            />
+          )}
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <div className="relative">
+              <button type="button" onClick={() => setShowAttachmentMenu(prev => !prev)} className="p-3 text-gray-400 transition-colors hover:text-green-400" title="Прикрепить">
                 <Paperclip size={20} />
               </button>
+              {showAttachmentMenu && (
+                <div className="absolute bottom-full z-10 mb-2 w-48 rounded-md border border-green-500/30 bg-gray-800 shadow-lg">
+                  <button type="button" onClick={() => { setShowGifPicker(true); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <Gift size={18} />
+                    <span>GIF</span>
+                  </button>
+                  <button type="button" onClick={() => { photoInputRef.current?.click(); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <ImageIcon size={18} />
+                    <span>Фото</span>
+                  </button>
+                  <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachmentMenu(false); }} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-200 hover:bg-gray-700">
+                    <FileIcon size={18} />
+                    <span>Файл</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
-              <button
-                type="button"
-                onClick={handleStartRecording}
-                disabled={isSending}
-                className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+            <input type="text" value={newMessage} onChange={handleTyping} placeholder="Type a message..." className="flex-1 rounded-lg border border-green-500/30 bg-gray-800 px-4 py-3 text-white transition-colors focus:border-green-500 focus:outline-none" disabled={isSending || isRecording} />
+
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+
+            <input ref={fileInputRef} type="file" onChange={handleFileSelect} className="hidden" />
+
+            {!isRecording && !newMessage.trim() && !fileToSend && (
+              <button type="button" onClick={handleStartRecording} disabled={isSending} className="rounded-lg bg-red-600 p-3 text-white transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
                 <Mic size={20} />
               </button>
-            </>
-          )}
+            )}
 
-          {(!isRecording && (newMessage.trim() || fileToSend)) && (
-            <button
-              type="submit"
-              disabled={isSending}
-              className="bg-green-500 hover:bg-green-600 text-gray-900 font-semibold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 neon-button"
-            >
-              <Send size={20} />
-            </button>
-          )}
-
-        </form>
+            {(!isRecording && (newMessage.trim() || fileToSend)) && (
+              <button type="submit" disabled={isSending} className="neon-button flex items-center gap-2 rounded-lg bg-green-500 py-3 px-6 font-semibold text-gray-900 transition-all hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50">
+                <Send size={20} />
+              </button>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   );
