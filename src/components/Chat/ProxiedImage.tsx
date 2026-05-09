@@ -1,25 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ProxiedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
 }
 
-const PROXY_URL = 'http://tests.vsp210.ru:8888/';
+const API_BASE_URL = 'https://vsp210.ru/api/v3/gifs/proxy?url=';
 
 export function ProxiedImage({ src, ...props }: ProxiedImageProps) {
   const [imageSrc, setImageSrc] = useState(src);
   const [hasErrored, setHasErrored] = useState(false);
 
+  useEffect(() => {
+    // Сбрасываем состояние при изменении `src`
+    setImageSrc(src);
+    setHasErrored(false);
+  }, [src]);
+
   const handleError = () => {
     if (!hasErrored) {
       setHasErrored(true);
-      const proxiedUrl = `${PROXY_URL}${src}`;
+      const proxiedUrl = `${API_BASE_URL}${encodeURIComponent(src)}`;
       setImageSrc(proxiedUrl);
     }
   };
 
   return (
     <img
+      crossOrigin="anonymous"
       src={imageSrc}
       onError={handleError}
       {...props}
