@@ -123,7 +123,7 @@ export function AuthForm() {
                   <span className="text-sm text-gray-400">
                     Я согласен на{' '}
                     <a
-                      href="http://127.0.0.1:8000/consent_personal_data"
+                      href="https://vsp210.ru/consent_personal_data"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-green-400 hover:underline"

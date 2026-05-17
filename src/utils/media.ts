@@ -1,6 +1,6 @@
 import { apiService } from '../services/api';
 
-const MEDIA_BASE_URL = 'http://127.0.0.1:8000';
+const MEDIA_BASE_URL = 'https://vsp210.ru';
 
 export function getMediaUrl(path: string | null): string | null {
   if (!path) return null;

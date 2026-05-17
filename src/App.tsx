@@ -242,10 +242,10 @@ function MainLayout() {
 
 
 const defaultAvatars = [
-  'http://127.0.0.1:8000/media/avatars/default_user_photo.png',
-  'http://127.0.0.1:8000/media/avatars/default_user_photo_2.png',
-  'http://127.0.0.1:8000/media/avatars/default_user_photo_3.jpg',
-  'http://127.0.0.1:8000/media/avatars/default_user_photo_4.jpg',
+  'https://vsp210.ru/media/avatars/default_user_photo.png',
+  'https://vsp210.ru/media/avatars/default_user_photo_2.png',
+  'https://vsp210.ru/media/avatars/default_user_photo_3.jpg',
+  'https://vsp210.ru/media/avatars/default_user_photo_4.jpg',
 ];
 
 interface ProfileEditModalProps {
