@@ -1,17 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiService, Chat, User } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { MessageCircle, CircleUser as UserCircle } from 'lucide-react';
+import { MessageCircle, CircleUser as UserCircle, Star } from 'lucide-react';
 import { getMediaUrl } from '../../utils/media';
 
 interface ChatListProps {
   onSelectChat: (username: string) => void;
 }
 
+const USER_HIGHLIGHT_CONFIG: Record<number, { color: string; label: string }> = {
+  1: { color: '#FACC15', label: 'Creator' },
+  // Добавьте сюда других пользователей с их id и цветами в формате hex.
+  // Пример:
+  // 42: { color: '#38BDF8', label: 'Moderator' },
+  34: { color: '#F97316', label: 'Paklonik' },
+};
+
+function getContrastingTextColor(hex: string) {
+  const normalized = hex.replace('#', '');
+  const r = parseInt(normalized.substring(0, 2), 16);
+  const g = parseInt(normalized.substring(2, 4), 16);
+  const b = parseInt(normalized.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 150 ? '#111827' : '#fff';
+}
+
 export function ChatList({ onSelectChat }: ChatListProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const loadChats = async () => {
     try {
@@ -74,7 +91,10 @@ export function ChatList({ onSelectChat }: ChatListProps) {
             {sortedChats.map((chat) => {
               const otherUser = getOtherUser(chat);
               const isNew = hasNewMessages(chat);
+              const userStyle = USER_HIGHLIGHT_CONFIG[otherUser.id];
               const isCreator = otherUser.id === 1;
+              const badgeTextColor = userStyle ? getContrastingTextColor(userStyle.color) : '#fff';
+              const avatarUrl = otherUser.avatar ? getMediaUrl(otherUser.avatar) ?? undefined : undefined;
 
               return (
                 <button
@@ -85,13 +105,21 @@ export function ChatList({ onSelectChat }: ChatListProps) {
                   <div className="relative">
                     {otherUser.avatar ? (
                       <img
-                        src={getMediaUrl(otherUser.avatar)}
+                        src={avatarUrl}
                         alt={otherUser.username}
-                        className={`w-12 h-12 rounded-full border border-green-500/30 ${isCreator ? 'ring-2 ring-yellow-400' : ''}`}
+                        className="w-12 h-12 rounded-full border border-green-500/30"
+                        style={userStyle ? { boxShadow: `0 0 0 2px ${userStyle.color}` } : undefined}
                       />
                     ) : (
-                      <div className={`w-12 h-12 rounded-full bg-gray-800 border border-green-500/30 flex items-center justify-center ${isCreator ? 'ring-2 ring-yellow-400' : ''}`}>
-                        <UserCircle className={`${isCreator ? 'text-yellow-400' : 'text-green-400'}`} size={28} />
+                      <div
+                        className="w-12 h-12 rounded-full border border-green-500/30 flex items-center justify-center"
+                        style={{ backgroundColor: userStyle?.color ?? '#111827', boxShadow: userStyle ? `0 0 0 2px ${userStyle.color}` : undefined }}
+                      >
+                        {isCreator ? (
+                          <Star className="text-white" size={24} />
+                        ) : (
+                          <UserCircle className={userStyle ? 'text-white' : 'text-green-400'} size={28} />
+                        )}
                       </div>
                     )}
                     {otherUser.is_online && (
@@ -100,13 +128,22 @@ export function ChatList({ onSelectChat }: ChatListProps) {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3
-                        className={`font-semibold ${isCreator ? 'text-yellow-400 font-bold' :
-                          isNew ? 'text-green-400' : 'text-gray-200'}`}
-                      >
-                        {otherUser.username}
-                      </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3
+                          className={`truncate font-semibold ${isCreator ? 'text-yellow-400 font-bold' : isNew ? 'text-green-400' : 'text-gray-200'}`}
+                        >
+                          {otherUser.username}
+                        </h3>
+                        {userStyle && (
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                            style={{ backgroundColor: userStyle.color, color: badgeTextColor }}
+                          >
+                            {userStyle.label}
+                          </span>
+                        )}
+                      </div>
                       {isNew && (
                         <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                       )}
