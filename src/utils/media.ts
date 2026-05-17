@@ -1,11 +1,16 @@
-const MEDIA_BASE_URL = 'https://vsp210.ru';
+import { apiService } from '../services/api';
+
+const MEDIA_BASE_URL = 'http://127.0.0.1:8000';
 
 export function getMediaUrl(path: string | null): string | null {
   if (!path) return null;
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  return `${MEDIA_BASE_URL}${path}`;
+  const token = apiService.getToken();
+  const url = new URL(path, MEDIA_BASE_URL);
+  if (token) url.searchParams.append('token', token);
+  return url.href;
 }
 
 export const getFileNameFromUrl = (url: string): string => {
@@ -18,29 +23,60 @@ export const getFileNameFromUrl = (url: string): string => {
   }
 }
 
-function parseTimestampWithTimezone(timestamp: string): Date { 
-  
-  
-  
-  let parsableTimestamp = timestamp;
-  if (timestamp.includes('T') && !timestamp.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(timestamp)) {
+export function parseTimestampWithTimezone(timestamp: string): Date {
+  const trimmed = timestamp.trim();
+
+  const hhmmDateMatch = trimmed.match(/^(\d{1,2}):(\d{2}),\s*(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (hhmmDateMatch) {
+    const [, hour, minute, day, month, year] = hhmmDateMatch;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    );
+  }
+
+  const sqlTimestampMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/);
+  if (sqlTimestampMatch) {
+    const [, year, month, day, hour, minute, second = '0', fraction = '0'] = sqlTimestampMatch;
+    const ms = Math.floor(Number(`0.${fraction}`) * 1000);
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+      ms,
+    );
+  }
+
+  let parsableTimestamp = trimmed;
+  if (trimmed.includes('T') && !trimmed.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(trimmed)) {
     parsableTimestamp += 'Z';
   }
 
   let date = new Date(parsableTimestamp);
 
   if (isNaN(date.getTime())) {
-    
-    const parts = timestamp.match(/(\d{2}):(\d{2}), (\d{2})\.(\d{2})\.(\d{4})/);
-    if (parts) {
-      const [, hour, minute, day, month, year] = parts;
-      
-      
-      date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute)));
+    const fallbackMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/);
+    if (fallbackMatch) {
+      const [, year, month, day, hour, minute, second = '0', fraction = '0'] = fallbackMatch;
+      const ms = Math.floor(Number(`0.${fraction}`) * 1000);
+      date = new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+        ms,
+      );
     }
   }
 
-  
   return date;
 }
 

@@ -6,13 +6,15 @@ import { ChatList } from './components/Chat/ChatList';
 import { UserSearch } from './components/Search/UserSearch';
 import NotificationButton from './components/NotificationButton';
 import { GroupChatList } from './components/Chat/GroupChatList'; 
-import { LogOut, Search, CircleUser as UserCircle, Edit, Plus } from 'lucide-react';
+import { LogOut, Search, CircleUser as UserCircle, Edit, Plus, SlidersHorizontal } from 'lucide-react';
 import { getMediaUrl } from './utils/media';
 import { ChatRouter } from './components/Chat/ChatRouter';
-import { apiService } from './services/api';
+import { apiService, User } from './services/api';
 import { GroupChatWrapper } from './components/Chat/GroupChatWrapper';
 import { CreateGroupModal } from './components/Chat/CreateGroupModal';
 import { ProfileSetupPage } from './components/Auth/ProfileSetupPage';
+import { ThemeCustomizer } from './components/Settings/ThemeCustomizer';
+import { applyThemeSettings, loadThemeSettings, saveThemeSettings, ThemeSettings } from './utils/theme';
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -70,8 +72,19 @@ function MainLayout() {
   const [activeView, setActiveView] = useState<'chats' | 'groups'>('chats');
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => loadThemeSettings());
   const navigate = useNavigate(); 
   const location = useLocation();
+
+  useEffect(() => {
+    applyThemeSettings(themeSettings);
+  }, [themeSettings]);
+
+  const handleThemeSave = (settings: ThemeSettings) => {
+    setThemeSettings(settings);
+    saveThemeSettings(settings);
+  };
 
   const isChatOpen = location.pathname.startsWith('/chat/') || location.pathname.startsWith('/group/');
 
@@ -102,15 +115,15 @@ function MainLayout() {
   };
 
   return (
-    <div className="flex h-screen">
-      <div className={`${isChatOpen ? 'hidden md:block' : 'block'} w-full md:w-80 flex flex-col bg-gray-950 border-r border-green-500/30`}>
-        <div className="bg-gray-900 border-b border-green-500/30 p-4">
+    <div className="flex h-screen app-root">
+      <div className={`${isChatOpen ? 'hidden md:block' : 'block'} w-full md:w-80 flex flex-col bg-[color:var(--surface-color)] border-r border-[color:var(--border-color)]`}>
+        <div className="bg-[color:var(--surface-strong-color)] border-b border-[color:var(--border-color)] p-4">
           <div className="flex items-center justify-between mb-4">
             <button onClick={() => setShowProfileEdit(true)} className="flex items-center gap-3 text-left w-full hover:bg-gray-800/50 p-2 -m-2 rounded-lg transition-colors group">
               <div className="relative">
                 {user?.avatar ? (
                   <img
-                    src={getMediaUrl(user.avatar)}
+                    src={getMediaUrl(user.avatar) ?? undefined}
                     alt={user.username}
                     className="w-10 h-10 rounded-full border-2 border-green-500"
                   />
@@ -128,8 +141,15 @@ function MainLayout() {
                 </div>
               </div>
             </button>
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
               <NotificationButton />
+              <button
+                onClick={() => setShowThemeSettings(true)}
+                className="p-2 text-gray-400 hover:text-green-300 transition-colors"
+                title="Theme settings"
+              >
+                <SlidersHorizontal size={20} />
+              </button>
               <button
                 onClick={auth.logout}
                 className="p-2 text-gray-400 hover:text-red-400 transition-colors"
@@ -168,7 +188,7 @@ function MainLayout() {
         {activeView === 'chats' ? <ChatList onSelectChat={handleSelectChat} /> : <GroupChatList onSelectGroup={handleSelectGroup} />}
       </div>
 
-      <div className="flex-1 bg-gray-950">
+      <div className="flex-1 bg-[color:var(--bg-color)]">
         <Routes>
           <Route path="/" element={
             <div className="hidden md:flex flex-1 flex-col items-center justify-center h-full">
@@ -197,17 +217,19 @@ function MainLayout() {
           onGroupCreated={handleGroupCreated}
         />
       )}
+      {showThemeSettings && (
+        <ThemeCustomizer
+          theme={themeSettings}
+          onClose={() => setShowThemeSettings(false)}
+          onSaveTheme={handleThemeSave}
+        />
+      )}
       {showProfileEdit && user && (
         <ProfileEditModal
           user={user}
           onClose={() => setShowProfileEdit(false)}
           onProfileUpdate={(updatedUser) => {
-            
             setUser(updatedUser);
-            
-            if(auth.updateUser) {
-              auth.updateUser(updatedUser);
-            }
           }}
         />
       )}
@@ -218,30 +240,18 @@ function MainLayout() {
 
 
 
-interface ProfileUser {
-  id: number;
-  username: string;
-  email?: string;
-  avatar: string | null;
-  gender: 'male' | 'female' | 'unspecified' | null;
-  info: string | null;
-  city: string | null;
-  is_online?: boolean;
-  first_name?: string | null;
-  last_name?: string | null;
-}
 
 const defaultAvatars = [
-  'https://vsp210.ru/media/avatars/default_user_photo.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_2.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_3.jpg',
-  'https://vsp210.ru/media/avatars/default_user_photo_4.jpg',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo.png',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_2.png',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_3.jpg',
+  'http://127.0.0.1:8000/media/avatars/default_user_photo_4.jpg',
 ];
 
 interface ProfileEditModalProps {
-  user: ProfileUser;
+  user: User;
   onClose: () => void;
-  onProfileUpdate: (updatedUser: ProfileUser) => void;
+  onProfileUpdate: (updatedUser: User) => void;
 }
 
 function ProfileEditModal({ user, onClose, onProfileUpdate }: ProfileEditModalProps) {

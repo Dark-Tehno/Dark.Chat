@@ -1,10 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { apiService, Message } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile, Gift } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
-import { getMediaUrl, formatTimeShort } from '../../utils/media';
-import { GifPicker } from './GifPicker'; 
+import { getMediaUrl, formatTimeShort, parseTimestampWithTimezone } from '../../utils/media';
+import { GifPicker } from './GifPicker';
 import { ProxiedImage } from './ProxiedImage';
 import { MediaGallery } from './MediaGallery';
 import { UserInfoPanel } from './UserInfoPanel';
@@ -18,6 +18,12 @@ interface ChatViewProps {
   username: string;
   onBack: () => void;
 }
+
+const randomGifs = [
+    "https://media0.giphy.com/media/v1.Y2lkPTg2Y2I4NmUybDExd2d0d2t6emd6aG42cHNiajhiZzRjOXdoYmZpd295dzNscTV0OSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/469zWikOwaeBJRjHC3/200w.gif", // Привет
+    "https://media4.giphy.com/media/v1.Y2lkPTg2Y2I4NmUyamxkdXAwdzRpemI3bnlnamRqNHBkNGJuMTkxcHc3MWw4eXd2NWpzZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Cmr1OMJ2FN0B2/200w.gif", // hello
+];
+
 
 export function ChatView({ username, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -41,9 +47,10 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [randomGifPreview, setRandomGifPreview] = useState<string | null>(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
-  const messageRefs = useRef<{ [key: number]: HTMLDivElement | null }>({}); 
+  const messageRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -58,20 +65,68 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  
+  const isSameDay = (firstTimestamp: string, secondTimestamp: string) => {
+    const first = parseTimestampWithTimezone(firstTimestamp);
+    const second = parseTimestampWithTimezone(secondTimestamp);
+    return (
+      first.getFullYear() === second.getFullYear() &&
+      first.getMonth() === second.getMonth() &&
+      first.getDate() === second.getDate()
+    );
+  };
+
+  const formatChatDate = (timestamp: string) => {
+    const date = parseTimestampWithTimezone(timestamp);
+    const now = new Date();
+
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      return 'Сегодня';
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (
+      date.getFullYear() === yesterday.getFullYear() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getDate() === yesterday.getDate()
+    ) {
+      return 'Вчера';
+    }
+
+    return date.toLocaleDateString(Intl.DateTimeFormat().resolvedOptions().locale, {
+      day: 'numeric',
+      month: 'long',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+    });
+  };
+
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => parseTimestampWithTimezone(a.created_at).getTime() - parseTimestampWithTimezone(b.created_at).getTime());
+  }, [messages]);
+
   const scrollToMessage = (messageId: number) => {
     const targetMessage = messageRefs.current[messageId];
     if (targetMessage) {
       targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
-      
-      
-      
-      
+
+
+
+
+
     } else {
       console.warn(`Message with ID ${messageId} not found in current view.`);
     }
   };
+
+  useEffect(() => {
+    if (!isLoading && messages.length === 0 && !randomGifPreview) {
+      handleShowRandomGif();
+    }
+  }, [isLoading, messages, randomGifPreview]);
 
   useEffect(() => {
     scrollToBottom();
@@ -89,12 +144,12 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     const initializeChat = async () => {
       setIsLoading(true);
       try {
-        
+
         const chatData = await apiService.createChat(username);
         const currentChatId = chatData.chat_id;
         setChatId(currentChatId);
 
-        
+
         const [messagesData, detailsData] = await Promise.all([
           apiService.getChatMessages(username),
           apiService.getChatDetails(username),
@@ -112,7 +167,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   }, [username]);
 
   useEffect(() => {
-    if (!chatId) return; 
+    if (!chatId) return;
 
     let reconnectTimeout: NodeJS.Timeout;
 
@@ -143,7 +198,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
               id: data.sender_id,
               username: data.username,
             },
-            chat_room_id: chatId, 
+            chat_room_id: chatId,
             button_json: null,
             reply_to: data.reply_to, 
             reactions: data.reactions,
@@ -155,7 +210,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
             return [...prevMessages, newMessage];
           });
         } else if (data.type === 'user_online_status') {
-          
+
           if (data.user_id !== user?.id) {
             setOtherUser((prev) => (prev ? { ...prev, is_online: data.is_online } : null));
           }
@@ -207,7 +262,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        
+
       };
 
       ws.onclose = () => {
@@ -225,7 +280,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
       }
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
-        wsRef.current.onclose = null; 
+        wsRef.current.onclose = null;
         wsRef.current.close();
       }
     };
@@ -233,7 +288,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
@@ -241,14 +296,14 @@ export function ChatView({ username, onBack }: ChatViewProps) {
         wsRef.current.send(JSON.stringify({ type: 'user_stopped_typing' }));
       }
     }
-    
+
     if ((!newMessage.trim() && !fileToSend) || isSending || !username) return;
 
     setIsSending(true);
     const replyToId = replyToMessage?.id;
     try {
       if (fileToSend) {
-        
+
         const isPhoto = fileToSend.type.startsWith('image/');
         if (isPhoto) {
           await apiService.sendPhoto(username, fileToSend, newMessage.trim() || undefined, replyToId);
@@ -256,7 +311,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
           await apiService.sendFile(username, fileToSend, newMessage.trim() || undefined, replyToId);
         }
       } else {
-        
+
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ message: newMessage.trim(), reply_to_id: replyToId }));
         } else {
@@ -264,7 +319,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
         }
       }
 
-      
+
       setNewMessage('');
       setReplyToMessage(null);
       setFileToSend(null);
@@ -300,11 +355,17 @@ export function ChatView({ username, onBack }: ChatViewProps) {
       }
       setReplyToMessage(null);
       setShowGifPicker(false);
+      setRandomGifPreview(null);
     } catch (error) {
       console.error('Failed to send GIF:', error);
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleShowRandomGif = () => {
+    const randomGif = randomGifs[Math.floor(Math.random() * randomGifs.length)];
+    setRandomGifPreview(randomGif);
   };
 
   const handleStartRecording = async () => {
@@ -370,14 +431,14 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     if (!file) return;
 
     setFileToSend(file);
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       setFilePreview(event.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    
+
     if (photoInputRef.current) {
       photoInputRef.current.value = '';
     }
@@ -388,9 +449,9 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     if (!file) return;
 
     setFileToSend(file);
-    setFilePreview(null); 
+    setFilePreview(null);
 
-    
+
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -404,7 +465,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
   const handleReplyMessage = (message: Message) => {
     setReplyToMessage(message);
-    setActiveMessageMenu(null); 
+    setActiveMessageMenu(null);
   };
 
   const handleCancelEdit = () => {
@@ -417,7 +478,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     setIsSending(true);
     try {
       await apiService.editMessage(editingMessageId, editingText);
-      
+
     } catch (error) {
       console.error('Failed to edit message:', error);
     } finally {
@@ -430,7 +491,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     if (window.confirm('Вы уверены, что хотите удалить это сообщение?')) {
       try {
         await apiService.deleteMessage(messageId);
-        
+
       } catch (error) {
         console.error('Failed to delete message:', error);
       }
@@ -458,7 +519,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
   const handleNotificationToggle = async (action: 'enable' | 'disable') => {
     if (!username) return;
 
-    setShowOptionsMenu(false); 
+    setShowOptionsMenu(false);
 
     try {
       const token = apiService.getToken();
@@ -468,9 +529,9 @@ export function ChatView({ username, onBack }: ChatViewProps) {
         return;
       }
 
-      
-      
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+
+
+      const apiBaseUrl = import.meta.env.PROD ? 'http://127.0.0.1:8000' : '';
       const response = await fetch(`${apiBaseUrl}/api/v3/chat/notification/${username}/`, {
         method: 'POST',
         headers: {
@@ -484,9 +545,9 @@ export function ChatView({ username, onBack }: ChatViewProps) {
         alert(`Уведомления ${action === 'enable' ? 'включены' : 'отключены'} для ${username}.`);
         setOtherUser(prev => {
           if (!prev) return null;
-          
-          
-          
+
+
+
           return { ...prev, user_notification: action === 'disable' };
         });
       } else {
@@ -505,12 +566,12 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     setShowMediaGallery(true);
     setIsMediaLoading(true);
     try {
-      
+
       const mediaData = await apiService.getChatMedia(username);
       setMedia(mediaData);
     } catch (error) {
       console.error('Failed to load chat media:', error);
-      
+
     } finally {
       setIsMediaLoading(false);
     }
@@ -615,14 +676,14 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
           {showOptionsMenu && otherUser && (
             <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg z-10 border border-green-500/30">
-              {otherUser.user_notification ? ( 
+              {otherUser.user_notification ? (
                 <button
                   onClick={() => handleNotificationToggle('enable')}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
                 >
                   Включить уведомления
                 </button>
-              ) : ( 
+              ) : (
                 <button
                   onClick={() => handleNotificationToggle('disable')}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
@@ -642,17 +703,40 @@ export function ChatView({ username, onBack }: ChatViewProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => {
+        {sortedMessages.length === 0 && !isLoading && (
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
+            <p className="text-lg mb-2">Сообщений пока нет.</p>
+            <p className="mb-4">Начните диалог первым или отправьте случайный GIF!</p>
+            <div className="w-full max-w-xs h-48 flex flex-col items-center justify-center">
+              {randomGifPreview && (
+                <div className="w-full p-2 bg-gray-800 rounded-lg flex flex-col items-center justify-center text-sm text-gray-300 border border-green-500/30 shadow-lg">
+                  <ProxiedImage src={randomGifPreview} alt="GIF Preview" className="w-full h-32 rounded-md object-contain mb-2" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSendGif(randomGifPreview)} className="px-3 py-1 text-xs rounded-lg bg-green-600 hover:bg-green-500 text-white">Отправить</button>
+                    <button onClick={handleShowRandomGif} className="px-3 py-1 text-xs rounded-lg bg-gray-600 hover:bg-gray-500 text-white">Другой</button>
+                    <button onClick={() => setRandomGifPreview(null)} className="px-3 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white">Отмена</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {sortedMessages.map((message, index) => {
           const isOwn = message.sender?.id === user?.id;
+          const previousMessage = sortedMessages[index - 1];
+          const showDateSeparator = index === 0 || (previousMessage && !isSameDay(previousMessage.created_at, message.created_at));
 
           return (
-            <div
-              key={message.id}
-              className={`flex group ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}
-            >
-              <div 
-                ref={(el) => (messageRefs.current[message.id] = el)} 
-                className={`relative max-w-[70%] rounded-lg p-3 pb-8 ${ 
+            <div key={message.id} className="space-y-3">
+              {showDateSeparator && (
+                <div className="date-separator mx-auto px-4 py-1 rounded-full bg-gray-800 text-xs text-gray-400 border border-green-500/20">
+                  {formatChatDate(message.created_at)}
+                </div>
+              )}
+              <div className={`flex group ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
+              <div
+                ref={(el) => (messageRefs.current[message.id] = el)}
+                className={`relative max-w-[70%] rounded-lg p-3 pb-8 ${
                   isOwn ? 'bg-green-500 text-gray-900' : 'bg-gray-800 text-gray-100 border border-green-500/30'
                 }`}
               >
@@ -706,7 +790,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                   </div>
                 )}
                 {message.photo && (
-                  
+
                   message.reply_to && (
                     <div
                       className={`p-2 mb-2 rounded-lg ${isOwn ? 'bg-green-600' : 'bg-gray-700'} border border-green-500/30 cursor-pointer`}
@@ -736,7 +820,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                   />
                 )}
                 {message.voice_message && (
-                  
+
                   message.reply_to && (
                     <div
                       className={`p-2 mb-2 rounded-lg ${isOwn ? 'bg-green-600' : 'bg-gray-700'} border border-green-500/30 cursor-pointer`}
@@ -760,7 +844,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                   </div>
                 )}
                 {message.file && (
-                  
+
                   message.reply_to && (
                     <div
                       className={`p-2 mb-2 rounded-lg ${isOwn ? 'bg-green-600' : 'bg-gray-700'} border border-green-500/30 cursor-pointer`}
@@ -830,6 +914,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                 </p>
               </div>
             </div>
+          </div>
           );
         })}
         <div ref={messagesEndRef} />

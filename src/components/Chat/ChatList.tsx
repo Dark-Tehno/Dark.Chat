@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiService, Chat, User } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { MessageCircle, CircleUser as UserCircle } from 'lucide-react';
@@ -34,6 +34,22 @@ export function ChatList({ onSelectChat }: ChatListProps) {
     return chat.user1.id === user?.id ? chat.user2 : chat.user1;
   };
 
+  const isSelfChat = (chat: Chat) => {
+    return user ? chat.user1.id === user.id && chat.user2.id === user.id : false;
+  };
+
+  const sortedChats = useMemo(() => {
+    if (!user) return chats;
+    return [...chats].sort((a, b) => {
+      const aSelf = isSelfChat(a);
+      const bSelf = isSelfChat(b);
+      if (aSelf !== bSelf) {
+        return aSelf ? -1 : 1;
+      }
+      return 0;
+    });
+  }, [chats, user]);
+
   const hasNewMessages = (chat: Chat): boolean => {
     if (chat.user1.id === user?.id) {
       return chat.new_message_user1;
@@ -55,7 +71,7 @@ export function ChatList({ onSelectChat }: ChatListProps) {
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
-            {chats.map((chat) => {
+            {sortedChats.map((chat) => {
               const otherUser = getOtherUser(chat);
               const isNew = hasNewMessages(chat);
               const isCreator = otherUser.id === 1;
