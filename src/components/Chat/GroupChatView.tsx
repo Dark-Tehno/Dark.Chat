@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiService, GroupMessage as Message, GroupChat } from '../../services/api';
+import { apiService, GroupMessage as Message, GroupChat, User } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArrowLeft, Send, Users as GroupIcon, Mic, Square, Image as ImageIcon, X, Paperclip, File as FileIcon, Edit, Trash2, Reply, MoreVertical, Smile, Gift } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
@@ -470,6 +470,32 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
     setActiveReactionMenu(null);
   };
 
+  const handleForwardMessage = async (message: Message) => {
+    if (!user) return;
+    try {
+      const forwardText = `Переслано из группы "${groupDetails?.name}" от ${message.sender?.username || 'Unknown'}:\n${message.text || ''}`;
+
+      if (message.photo) {
+        await apiService.sendPhoto(user.username, message.photo, forwardText);
+      } else if (message.file) {
+        await apiService.sendFile(user.username, message.file.url, forwardText);
+      } else if (message.voice_message) {
+        await apiService.sendVoice(user.username, message.voice_message);
+      } else if (message.gif) {
+        await apiService.sendMessage(user.username, '', undefined, message.gif);
+      } else if (message.text) {
+        await apiService.sendMessage(user.username, forwardText);
+      }
+      // Optionally, show a success notification
+      alert('Сообщение переслано в Избранное');
+    } catch (error) {
+      console.error('Failed to forward message:', error);
+      alert('Не удалось переслать сообщение.');
+    } finally {
+      // Close any open menus
+    }
+  };
+
   const handleGroupUpdate = useCallback(() => {
     
     initializeGroupChat();
@@ -605,7 +631,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
         {messages.map((message) => {
           
           if ('isSystem' in message) {
@@ -639,7 +665,7 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                   }`}
                 >
                   {message.reactions && Object.keys(message.reactions).length > 0 && (
-                    <div className="absolute -bottom-3 left-2 flex gap-1 z-10">
+                    <div className="absolute bottom-full mb-2 left-2 flex gap-1 z-10">
                       {Object.entries(message.reactions).map(([emoji, userIds]) => (
                         userIds.length > 0 && (
                           <button
@@ -676,12 +702,14 @@ export function GroupChatView({ groupUrl, onBack }: GroupChatViewProps) {
                         <button onClick={() => handleEditMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Edit size={14} /></button>
                       )}
                       <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
+                      <button onClick={() => handleForwardMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-green-500"><Forward size={14} /></button>
                       <button onClick={() => handleDeleteMessage(message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-red-600"><Trash2 size={14} /></button>
                     </div>
                   )}
                   {!isOwn && message.text !== 'Сообщение удалено' && (
                     <div className="absolute top-0 left-full ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
+                      <button onClick={() => handleForwardMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-green-500"><Forward size={14} /></button>
                       <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
                       {isCreator && (
                         <button onClick={() => handleDeleteMessage(message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-red-600"><Trash2 size={14} /></button>

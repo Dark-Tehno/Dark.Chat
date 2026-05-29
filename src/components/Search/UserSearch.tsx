@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { apiService, User } from '../../services/api';
 import { X, Search, MessageCircle, CircleUser as UserCircle, MoreVertical } from 'lucide-react';
 import { getMediaUrl } from '../../utils/media';
+import { HOST } from '../../config';
 
 interface UserSearchProps {
   onClose: () => void;
@@ -169,7 +170,7 @@ export function UserSearch({ onClose, onStartChat }: UserSearchProps) {
                               Написать
                             </button>
                             <a
-                              href={`https://vsp210.ru/account/profile/${user.username}/`}
+                              href={`${HOST}/account/profile/${user.username}/`}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={() => setActiveDropdownUserId(null)}

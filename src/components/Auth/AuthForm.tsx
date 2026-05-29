@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { HOST } from '../../config';
 import { LogIn, UserPlus } from 'lucide-react';
 
 export function AuthForm() {
@@ -123,7 +124,7 @@ export function AuthForm() {
                   <span className="text-sm text-gray-400">
                     Я согласен на{' '}
                     <a
-                      href="https://vsp210.ru/consent_personal_data"
+                      href={`${HOST}/consent_personal_data`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-green-400 hover:underline"

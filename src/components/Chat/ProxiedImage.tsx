@@ -4,7 +4,9 @@ interface ProxiedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
 }
 
-const API_BASE_URL = 'https://vsp210.ru/api/v3/gifs/proxy?url=';
+import { API_BASE_URL } from '../../config';
+
+const API_PROXY_PREFIX = `${API_BASE_URL}/gifs/proxy?url=`;
 
 export function ProxiedImage({ src, ...props }: ProxiedImageProps) {
   const [imageSrc, setImageSrc] = useState(src);
@@ -19,7 +21,7 @@ export function ProxiedImage({ src, ...props }: ProxiedImageProps) {
   const handleError = () => {
     if (!hasErrored) {
       setHasErrored(true);
-      const proxiedUrl = `${API_BASE_URL}${encodeURIComponent(src)}`;
+      const proxiedUrl = `${API_PROXY_PREFIX}${encodeURIComponent(src)}`;
       setImageSrc(proxiedUrl);
     }
   };

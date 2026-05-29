@@ -3,6 +3,8 @@ import type { ChangeEvent } from 'react';
 import { X, RefreshCcw, UploadCloud, DownloadCloud } from 'lucide-react';
 import { ThemeSettings, defaultThemeSettings } from '../../utils/theme';
 
+const APK_URL = 'https://vsp210.ru/static/files/Dark-Chat.apk';
+
 const presets: Array<{ name: string; theme: ThemeSettings }> = [
   {
     name: 'Neon Night',
@@ -400,6 +402,15 @@ export function ThemeCustomizer({ theme, onClose, onSaveTheme }: ThemeCustomizer
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[color:var(--border-color)] bg-[color:var(--surface-strong-color)] p-4">
+          {typeof window !== 'undefined' && (window.location.hostname.includes('vsp210.ru') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+            <button
+              onClick={() => window.open(APK_URL, '_blank', 'noopener')}
+              className="btn-secondary px-6 py-3 flex items-center gap-2"
+              title="Установить приложение"
+            >
+              <DownloadCloud size={16} />Установить приложение
+            </button>
+          )}
           <button
             onClick={() => onSaveTheme(draft)}
             className="btn-primary px-6 py-3"

@@ -1,6 +1,6 @@
 import { apiService } from '../services/api';
 
-const MEDIA_BASE_URL = 'https://vsp210.ru';
+import { MEDIA_BASE_URL } from '../config';
 
 export function getMediaUrl(path: string | null): string | null {
   if (!path) return null;

@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://vsp210.ru', 
+        target: process.env.VITE_HOST || 'https://vsp210.ru',
         changeOrigin: true,
       },
     },

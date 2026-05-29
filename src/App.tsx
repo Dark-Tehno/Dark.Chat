@@ -8,6 +8,7 @@ import NotificationButton from './components/NotificationButton';
 import { GroupChatList } from './components/Chat/GroupChatList'; 
 import { LogOut, Search, CircleUser as UserCircle, Edit, Plus, SlidersHorizontal } from 'lucide-react';
 import { getMediaUrl } from './utils/media';
+import { MEDIA_BASE_URL } from './config';
 import { ChatRouter } from './components/Chat/ChatRouter';
 import { apiService, User } from './services/api';
 import { GroupChatWrapper } from './components/Chat/GroupChatWrapper';
@@ -15,6 +16,7 @@ import { CreateGroupModal } from './components/Chat/CreateGroupModal';
 import { ProfileSetupPage } from './components/Auth/ProfileSetupPage';
 import { ThemeCustomizer } from './components/Settings/ThemeCustomizer';
 import { applyThemeSettings, loadThemeSettings, saveThemeSettings, ThemeSettings } from './utils/theme';
+import InstallPrompt from './components/InstallPrompt';
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -233,6 +235,7 @@ function MainLayout() {
           }}
         />
       )}
+      <InstallPrompt />
     </div>
   );
 }
@@ -242,10 +245,10 @@ function MainLayout() {
 
 
 const defaultAvatars = [
-  'https://vsp210.ru/media/avatars/default_user_photo.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_2.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_3.jpg',
-  'https://vsp210.ru/media/avatars/default_user_photo_4.jpg',
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo.png`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_2.png`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_3.jpg`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_4.jpg`,
 ];
 
 interface ProfileEditModalProps {

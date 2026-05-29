@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
 import { getMediaUrl } from '../../utils/media';
+import { MEDIA_BASE_URL } from '../../config';
 import { UserCircle, Edit } from 'lucide-react';
 
 const defaultAvatars = [
-  'https://vsp210.ru/media/avatars/default_user_photo.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_2.png',
-  'https://vsp210.ru/media/avatars/default_user_photo_3.jpg',
-  'https://vsp210.ru/media/avatars/default_user_photo_4.jpg',
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo.png`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_2.png`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_3.jpg`,
+  `${MEDIA_BASE_URL}/media/avatars/default_user_photo_4.jpg`,
 ];
 
 export function ProfileSetupPage() {

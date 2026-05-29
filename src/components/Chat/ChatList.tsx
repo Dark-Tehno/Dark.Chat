@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiService, Chat, User } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { MessageCircle, CircleUser as UserCircle, Star } from 'lucide-react';
+import { MessageCircle, CircleUser as UserCircle, Star, Bookmark } from 'lucide-react';
 import { getMediaUrl } from '../../utils/media';
 
 interface ChatListProps {
@@ -9,10 +9,7 @@ interface ChatListProps {
 }
 
 const USER_HIGHLIGHT_CONFIG: Record<number, { color: string; label: string }> = {
-  1: { color: '#FACC15', label: 'Creator' },
-  // Добавьте сюда других пользователей с их id и цветами в формате hex.
-  // Пример:
-  // 42: { color: '#38BDF8', label: 'Moderator' },
+  1: { color: '#FACC15', label: 'Кто я?' },
   34: { color: '#F97316', label: 'Paklonik' },
 };
 
@@ -29,6 +26,7 @@ export function ChatList({ onSelectChat }: ChatListProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const [isCreatingSelfChat, setIsCreatingSelfChat] = useState(false);
 
   const loadChats = async () => {
     try {
@@ -55,16 +53,31 @@ export function ChatList({ onSelectChat }: ChatListProps) {
     return user ? chat.user1.id === user.id && chat.user2.id === user.id : false;
   };
 
+  const selfChat = useMemo(() => chats.find(isSelfChat), [chats]);
+
+  const handleSelfChatClick = async () => {
+    if (!user) return;
+
+    if (selfChat) {
+      onSelectChat(user.username);
+    } else {
+      setIsCreatingSelfChat(true);
+      try {
+        await apiService.createChat(user.username);
+        await loadChats();
+        onSelectChat(user.username);
+      } catch (error) {
+        console.error('Failed to create self chat:', error);
+      } finally {
+        setIsCreatingSelfChat(false);
+      }
+    }
+  };
+
   const sortedChats = useMemo(() => {
     if (!user) return chats;
-    return [...chats].sort((a, b) => {
-      const aSelf = isSelfChat(a);
-      const bSelf = isSelfChat(b);
-      if (aSelf !== bSelf) {
-        return aSelf ? -1 : 1;
-      }
-      return 0;
-    });
+    // Фильтруем чат с собой, так как он будет отображаться отдельно
+    return [...chats].filter(chat => !isSelfChat(chat));
   }, [chats, user]);
 
   const hasNewMessages = (chat: Chat): boolean => {
@@ -88,6 +101,39 @@ export function ChatList({ onSelectChat }: ChatListProps) {
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
+            <button
+              onClick={handleSelfChatClick}
+              disabled={isCreatingSelfChat}
+              className="w-full p-4 hover:bg-gray-900/50 transition-colors text-left flex items-start gap-3 disabled:opacity-70 disabled:cursor-wait"
+            >
+              <div className="relative">
+                <div
+                  className="w-12 h-12 rounded-full border border-green-500/30 flex items-center justify-center bg-green-500/10"
+                >
+                  <Bookmark className="text-green-400" size={24} />
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h3 className="truncate font-semibold text-green-400">
+                    Избранное
+                  </h3>
+                  {selfChat && hasNewMessages(selfChat) && (
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  )}
+                </div>
+                {isCreatingSelfChat ? (
+                  <p className="text-sm text-gray-400 truncate">Создание чата...</p>
+                ) : selfChat?.last_message ? (
+                  <p className="text-sm text-gray-400 truncate">
+                    {selfChat.last_message.text || 'Медиафайл'}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500 truncate">Сохраненные сообщения</p>
+                )}
+              </div>
+            </button>
             {sortedChats.map((chat) => {
               const otherUser = getOtherUser(chat);
               const isNew = hasNewMessages(chat);

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { apiService, Message } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile, Gift } from 'lucide-react';
+import { ArrowLeft, Send, CircleUser as UserCircle, Mic, Square, Image as ImageIcon, X, MoreVertical, Paperclip, File as FileIcon, Trash2, Edit, Reply, Smile, Gift, Forward } from 'lucide-react';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getMediaUrl, formatTimeShort, parseTimestampWithTimezone } from '../../utils/media';
+import { HOST } from '../../config';
 import { GifPicker } from './GifPicker';
 import { ProxiedImage } from './ProxiedImage';
 import { MediaGallery } from './MediaGallery';
@@ -499,6 +500,32 @@ export function ChatView({ username, onBack }: ChatViewProps) {
     setActiveMessageMenu(null);
   };
 
+  const handleForwardMessage = async (message: Message) => {
+    if (!user) return;
+    try {
+      const forwardText = `Переслано от ${message.sender?.username || 'Unknown'}:\n${message.text || ''}`;
+
+      if (message.photo) {
+        await apiService.sendPhoto(user.username, message.photo, forwardText);
+      } else if (message.file) {
+        await apiService.sendFile(user.username, message.file.url, forwardText);
+      } else if (message.voice_message) {
+        await apiService.sendVoice(user.username, message.voice_message);
+      } else if (message.gif) {
+        await apiService.sendMessage(user.username, '', undefined, message.gif);
+      } else if (message.text) {
+        await apiService.sendMessage(user.username, forwardText);
+      }
+      // Optionally, show a success notification
+      alert('Сообщение переслано в Избранное');
+    } catch (error) {
+      console.error('Failed to forward message:', error);
+      alert('Не удалось переслать сообщение.');
+    } finally {
+      setActiveMessageMenu(null);
+    }
+  };
+
   const handleReaction = async (messageId: number, reaction: string) => {
     try {
       // Бэкенд отправит событие websocket для обновления UI.
@@ -531,7 +558,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
 
 
 
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+      const apiBaseUrl = HOST;
       const response = await fetch(`${apiBaseUrl}/api/v3/chat/notification/${username}/`, {
         method: 'POST',
         headers: {
@@ -780,6 +807,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                       <button onClick={() => handleEditMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Edit size={14} /></button>
                     )}
                     <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
+                    <button onClick={() => handleForwardMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-green-500"><Forward size={14} /></button>
                     <button onClick={() => handleDeleteMessage(message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-red-600"><Trash2 size={14} /></button>
                   </div>
                 )}
@@ -787,6 +815,7 @@ export function ChatView({ username, onBack }: ChatViewProps) {
                   <div className="absolute top-0 left-full ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => setActiveReactionMenu(activeReactionMenu === message.id ? null : message.id)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-yellow-500"><Smile size={14} /></button>
                     <button onClick={() => handleReplyMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-blue-600"><Reply size={14} /></button>
+                    <button onClick={() => handleForwardMessage(message)} className="p-1 bg-gray-700 rounded-full text-white hover:bg-green-500"><Forward size={14} /></button>
                   </div>
                 )}
                 {message.photo && (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
+import { HOST } from '../config';
 import { Bell } from 'lucide-react';
 
 
@@ -103,7 +104,7 @@ const NotificationButton: React.FC = () => {
       }
 
       
-      const apiBaseUrl = import.meta.env.PROD ? 'https://vsp210.ru' : '';
+      const apiBaseUrl = HOST;
 
       
       console.log('Шаг 4: Отправляем подписку на сервер...');
