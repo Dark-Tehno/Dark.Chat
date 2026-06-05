@@ -16,7 +16,6 @@ import { CreateGroupModal } from './components/Chat/CreateGroupModal';
 import { ProfileSetupPage } from './components/Auth/ProfileSetupPage';
 import { ThemeCustomizer } from './components/Settings/ThemeCustomizer';
 import { applyThemeSettings, loadThemeSettings, saveThemeSettings, ThemeSettings } from './utils/theme';
-import InstallPrompt from './components/InstallPrompt';
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -235,7 +234,6 @@ function MainLayout() {
           }}
         />
       )}
-      <InstallPrompt />
     </div>
   );
 }

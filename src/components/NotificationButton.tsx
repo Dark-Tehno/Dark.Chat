@@ -29,15 +29,12 @@ const NotificationButton: React.FC = () => {
       if ('Notification' in window) {
         const currentPermission = Notification.permission;
         setPermission(currentPermission);
-
-        
-        
         const hasResubscribed = localStorage.getItem('hasResubscribedAfterDbWipe');
 
         if (currentPermission === 'granted' && !hasResubscribed) {
           console.log('Разрешение уже есть, попытка автоматической повторной подписки...');
           await subscribeUserToPush();
-          
+
           localStorage.setItem('hasResubscribedAfterDbWipe', 'true');
           console.log('Попытка повторной подписки завершена, установлен флаг в localStorage.');
         }
@@ -123,7 +120,6 @@ const NotificationButton: React.FC = () => {
     }
   };
 
-  
   if (!('Notification' in window)) {
     return null;
   }
